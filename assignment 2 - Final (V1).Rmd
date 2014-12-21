@@ -1,0 +1,152 @@
+---
+###title: "Reproducible Research Assignment 2"
+###author: "Roberto"
+###date: "Sunday, December 21, 2014"
+###output: html_document
+---
+
+#The fatal impact of tornadoes and economic effects of floods
+        
+##1- Synopsis
+
+This report illustrates through an analysis about the impacts of diversed weather events on the US Population Health & Economics. 
+
+This report downloads data from NOAA Storm Database and performs a statistical analysis on the impact of physical events to population health and economy.
+
+Examining the event types, we observe that most of the physical phenomena cause injuries to people, which sometimes are fatal. By far, Tornadoes are the most dangerous events, caused the most number of injuries on the last 60 years.
+
+When analysing the event types by the impact on the economy, we observe that floods and hails caused the most massive damages in the last few decades, mostly on properties.
+
+
+##2 - Analysis Question
+A).     Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?  
+B).	Across the United States, which types of events have the greatest economic consequences?  
+
+
+
+
+##3 - Data Processing
+
+
+```{r}
+library(ggplot2)  # plot 
+# attributes
+ff <- file.path(getwd(), "repdata_data_StormData.csv.bz2")
+data <- read.csv(ff, stringsAsFactors = FALSE, sep=",", header=T)
+```
+
+This is followed by exploring the raw data, to have a brief understanding on the data.
+
+```{r}
+summary(data)
+str(data)
+```
+
+Since the weather data was collected over a period of 60 years, with a more complete data in the later years, let's first try to understand the frequency of the data being collected over the years from 1950 to 2011.
+
+We will first trim the time format from the BGN_DATE variable.
+```{r}
+data$DATE <- gsub(" 0:00:00", "", data$BGN_DATE)
+data$DATE <- strptime(data$DATE, "%m/%d/%Y")
+```
+
+```{r}
+library("lubridate")
+# Check to see how the data is collected in the years
+hist(year(data$DATE), main="Severe Weather Events (1950 - 2011)", xlab="Year", breaks=61)
+```     
+
+
+From the above histogram, there are more completed records collected in recent years. The data collected from 1950 - 1970 were sparse, hence potentially unreliable. Therefore for this analysis, only the data from 1970 to 2011 will be used.
+
+
+
+```{r}
+# Clean data
+dataFocused <- data[year(data$DATE) >= 1970,]
+```
+
+There are also too many different event types in the data and will require to do some cleaning to tidy them for our data plotting later.
+
+```{r}# Check EVTYPE and find the general event type
+unique(dataFocused$EVTYPE)
+# Remove data with "summary" in the EVTYPE
+dataFocused$EVTYPE <- toupper(as.character(dataFocused$EVTYPE))
+dataFocused <- dataFocused[grep("SUMMARY", dataFocused$EVTYPE, invert=TRUE),]
+```
+
+By looking at the top 20 event types which have the most number of fatalities and injuries, it is needed to check whether the names of these event types are suitable.
+
+```{r}
+# check the event type
+dataEvent <- aggregate(FATALITIES~ EVTYPE, data=dataFocused, sum)
+# Understand the top 10 natural disasters
+head(dataEvent[order(dataEvent$FATALITIES, decreasing=TRUE),], 20)
+```
+
+```{r}
+dataEvent <- aggregate(INJURIES~ EVTYPE, data=dataFocused, sum)
+# Understand the top 10 natural disasters
+head(dataEvent[order(dataEvent$INJURIES, decreasing=TRUE),], 20)
+```
+
+Some event types are identified and grouping accordingly.
+```{r}
+dataFocused$EVTYPE[grep("HEAT|WARM", dataFocused$EVTYPE)] <- "HEAT"
+dataFocused$EVTYPE[grep("TORNADO", dataFocused$EVTYPE)] <- "TORNADO"
+dataFocused$EVTYPE[grep("HURRICANE|TYPHOON", dataFocused$EVTYPE)] <- "HURRICANE"
+dataFocused$EVTYPE[grep("FLOOD|FLD", dataFocused$EVTYPE)] <- "FLOOD"
+dataFocused$EVTYPE[grep("WIND", dataFocused$EVTYPE)] <- "WIND"
+dataFocused$EVTYPE[grep("AVALANC", dataFocused$EVTYPE)] <- "AVALANCHE"
+dataFocused$EVTYPE[grep("SNOW", dataFocused$EVTYPE)] <- "SNOW"
+dataFocused$EVTYPE[grep("STORM", dataFocused$EVTYPE)] <- "STORM"
+dataFocused$EVTYPE[grep("FIRE", dataFocused$EVTYPE)] <- "FIRE"
+dataFocused$EVTYPE[grep("HAIL", dataFocused$EVTYPE)] <- "HAIL"
+# Iterate {exploreEvent} code to check eventType which have not catered in the above category grouping 
+dataFocused$EVTYPE[grep("CURRENT|SURF|WAVE|SEA|MARINE", dataFocused$EVTYPE)] <- "COAST CONDITIONS"
+dataFocused$EVTYPE[grep("COLD|WINTER|GLAZE|HYPOTHERMIA|LOW|WINTRY", dataFocused$EVTYPE)] <- "COLD"
+dataFocused$EVTYPE[grep("LAND", dataFocused$EVTYPE)] <- "LANDSLIDE"
+dataFocused$EVTYPE[grep("FOG", dataFocused$EVTYPE)] <- "FOG"
+dataFocused$EVTYPE[grep("RAIN", dataFocused$EVTYPE)] <- "RAIN"
+```
+
+##4 - Results
+Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+All the records will be merged to include the fatalities and injuries into a dataset.
+
+The plot figure belows show the 10 most harmful weather events with respect to population health.
+
+
+```{r}
+dataEvent <- aggregate(FATALITIES~ EVTYPE, data=dataFocused, sum)
+dataEvent <- merge(dataEvent, aggregate(INJURIES~ EVTYPE, data=dataFocused, sum))
+dataEvent$TOTALCOUNT <- dataEvent$FATALITIES + dataEvent$INJURIES
+dataEvent <- dataEvent[order(dataEvent$TOTALCOUNT, decreasing=TRUE),]
+dataQ1 <- subset(dataEvent, select=c(FATALITIES, INJURIES))
+dataQ1 <- t(as.matrix(dataQ1[1:10,]))
+
+par(mfrow=c(1,1))
+barplot(dataQ1, names.arg=dataEvent$EVTYPE[1:10], horiz = FALSE, las = 3, cex.names = 0.75, cex.axis = 0.65, offset = 0, main="Fatalities & Injuries caused by weather events", ylab="Frequency", legend = rownames(dataQ1))
+```
+
+Across the United States, which types of events have the greatest economic consequences?
+
+The plot figure belows show the top 10 weather events which have the most impact in the economic consequences.
+
+
+```{r}
+dataEcon <- aggregate(CROPDMG ~ EVTYPE, data=dataFocused, sum)
+dataEcon <- merge(dataEcon, aggregate(PROPDMG ~ EVTYPE, data=dataFocused, sum))
+dataEcon$TOTALCOUNT <- dataEcon$PROPDMG + dataEcon$CROPDMG
+dataEcon <- dataEcon[order(dataEcon$TOTALCOUNT, decreasing=TRUE),]
+dataQ2 <- subset(dataEcon, select=c(CROPDMG, PROPDMG))
+dataQ2 <- t(as.matrix(dataQ2[1:10,]))
+rownames(dataQ2) <- c("Crop Damage", "Property Damage")
+  
+par(mfrow=c(1,1))
+barplot(dataQ2, names.arg=dataEcon$EVTYPE[1:10], horiz = FALSE, las = 3, cex.names = 0.75, cex.axis = 0.65, offset = 0, main="Property & Crop Damage caused by weather events", ylab="Frequency", legend = rownames(dataQ2))
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
